@@ -27,6 +27,24 @@ router.get('/latest', schemeController.getLatestSchemes);
  * @desc    Get scheme by ID
  * @access  Public
  */
+/**
+ * @route   GET /api/schemes/fetch-government-schemes
+ * @desc    Fetch schemes from data.gov.in
+ * @access  Public
+ */
+router.get(
+  '/fetch-government-schemes',
+  schemeController.fetchGovernmentSchemes
+);
+/**
+ * @route   GET /api/schemes/scrape-myscheme
+ * @desc    Scrape schemes from MyScheme
+ * @access  Public
+ */
+router.get(
+  '/scrape-myscheme',
+  schemeController.scrapeMyScheme
+);
 router.get('/:id', schemeController.getSchemeById);
 
 /**

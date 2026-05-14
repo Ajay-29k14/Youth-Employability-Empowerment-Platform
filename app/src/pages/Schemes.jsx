@@ -95,7 +95,7 @@ const Schemes = () => {
 
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= pagination.pages) {
-      fetchJobs(newPage);
+      fetchSchemes(newPage);
     }
   };
 

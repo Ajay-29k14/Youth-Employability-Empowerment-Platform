@@ -3,7 +3,8 @@
  * Handles government schemes CRUD operations
  */
 const { Scheme, User } = require('../models');
-
+const axios = require("axios");
+const puppeteer = require("puppeteer");
 /**
  * @desc    Create a new scheme (Admin only)
  * @route   POST /api/schemes
@@ -257,12 +258,211 @@ const notifyUsersAboutScheme = async (scheme) => {
     console.error('Error notifying users about scheme:', error);
   }
 };
+/**
+ * @desc    Fetch government schemes from data.gov.in
+ * @route   GET /api/schemes/fetch-government-schemes
+ * @access  Public
+ */
+const fetchGovernmentSchemes = async (req, res) => {
+  try {
 
+    const apiKey = process.env.DATA_GOV_API_KEY;
+
+    const resourceId =
+      "8b68ae56-84cf-4728-a0a6-1be11028dea7";
+
+    const url = `https://api.data.gov.in/resource/${resourceId}?api-key=${apiKey}&format=json`;
+
+    const response = await axios.get(url);
+
+    const records = response.data.records || [];
+    console.log(records[0]);
+    let addedCount = 0;
+
+    for (const item of records) {
+
+      // Prevent duplicates
+      const existingScheme = await Scheme.findOne({
+        name: item.scheme_name
+      });
+
+      if (!existingScheme) {
+
+        const newScheme = new Scheme({
+          name: item.scheme_name || "Government Scheme",
+
+          description:
+            item.description ||
+            "Government welfare scheme",
+
+          category:"Other",
+            
+
+          targetAudience: ["All"],
+
+          benefits:[
+            item.benefits ||
+            "Refer official government website",
+          ],
+          eligibility:{
+            otherCriteria:
+            item.eligibility ||
+            "Refer official guidelines",
+          },
+          applicationProcess:
+            "Visit official website for application process",
+
+          applyLink:
+            item.url || "",
+
+          isActive: true
+        });
+
+        await newScheme.save();
+
+        addedCount++;
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `${addedCount} schemes added successfully`,
+      totalFetched: records.length
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Government scheme fetch error:",
+      error.message
+    );
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch government schemes",
+      error: error.message
+    });
+  }
+};
+const cheerio = require("cheerio");
+const scrapeMyScheme = async (req, res) => {
+  try {
+
+    const browser = await puppeteer.launch({
+      headless: true
+    });
+
+    const page = await browser.newPage();
+
+    await page.goto(
+      "https://www.myscheme.gov.in/schemes/pmsby",
+      {
+        waitUntil: "networkidle2"
+      }
+    );
+
+    // Wait for content
+    await page.waitForSelector("h1");
+const schemeData = await page.evaluate(() => {
+
+ 
+  const titleElement = Array.from(
+  document.querySelectorAll("*")
+).find(el =>
+  el.innerText &&
+  el.innerText.trim() ===
+    "Pradhan Mantri Suraksha Bima Yojana"
+);
+
+const title =
+  titleElement?.innerText || "";
+
+  const paragraphs = Array.from(
+    document.querySelectorAll("p")
+  );
+
+  const description =
+  paragraphs
+    .map(p => p.innerText.trim())
+    .find(text =>
+      text.length > 120 &&
+      text.length < 350 &&
+      !text.includes("Who Can") &&
+      !text.includes("Quick Links") &&
+      !text.includes("Frequently Asked Questions") &&
+      !text.includes("Was this helpful") &&
+      !text.includes("Sign In") &&
+      !text.includes("Dashboard") &&
+      !text.includes("Accessibility")
+    ) || "Government welfare scheme";
+
+  return {
+    title,
+    description
+  };
+});
+
+    await browser.close();
+
+    const existingScheme = await Scheme.findOne({
+  name: schemeData.title
+});
+
+if (!existingScheme) {
+
+  const newScheme = new Scheme({
+
+    name: schemeData.title,
+
+    description: schemeData.description,
+
+    category: "Other",
+
+    targetAudience: ["All"],
+
+    benefits: [
+      "Visit official website for details"
+    ],
+
+    eligibility: {
+      otherCriteria:
+        "Check official scheme guidelines"
+    },
+
+    applicationProcess:
+      "Apply through official portal",
+
+    applyLink:
+      "https://www.myscheme.gov.in/schemes/pmsby",
+
+    isActive: true
+  });
+
+  await newScheme.save();
+}
+
+    res.json({
+  success: true,
+  message: "Scheme saved successfully",
+  data: schemeData
+});
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+};
 module.exports = {
   createScheme,
   getSchemes,
   getSchemeById,
   updateScheme,
   deleteScheme,
-  getLatestSchemes
+  getLatestSchemes,
+  fetchGovernmentSchemes,
+  scrapeMyScheme
 };
