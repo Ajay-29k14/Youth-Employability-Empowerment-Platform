@@ -8,6 +8,7 @@ const { schemeController } = require('../controllers');
 const { auth, adminOnly } = require('../middleware/auth');
 const { schemeValidation } = require('../middleware/validation');
 
+
 /**
  * @route   GET /api/schemes
  * @desc    Get all schemes with filters
@@ -44,6 +45,14 @@ router.get(
 router.get(
   '/scrape-myscheme',
   schemeController.scrapeMyScheme
+);
+router.get(
+  "/test-api",
+  schemeController.testApi
+);
+router.get(
+  "/import-myscheme",
+  schemeController.importMySchemeData
 );
 router.get('/:id', schemeController.getSchemeById);
 

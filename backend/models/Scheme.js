@@ -22,6 +22,12 @@ const schemeSchema = new mongoose.Schema({
     enum: ['Skill Development', 'Employment', 'Education', 'Entrepreneurship', 'Training', 'Other'],
     default: 'Other'
   },
+  // State
+state: {
+  type: String,
+  enum: ["Odisha", "Central"],
+  default: "Central"
+},
   
   // Eligibility Criteria
   eligibility: {

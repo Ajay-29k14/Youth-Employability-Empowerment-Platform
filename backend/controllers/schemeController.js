@@ -85,7 +85,8 @@ const getSchemes = async (req, res) => {
     
     // Get total count
     const total = await Scheme.countDocuments(filter);
-    
+    console.log("Total schemes found:", total);
+console.log("Schemes returned:", schemes.length);
     res.json({
       success: true,
       data: {
@@ -345,9 +346,10 @@ const fetchGovernmentSchemes = async (req, res) => {
   }
 };
 const cheerio = require("cheerio");
+
+
 const scrapeMyScheme = async (req, res) => {
   try {
-
     const browser = await puppeteer.launch({
       headless: true
     });
@@ -355,104 +357,289 @@ const scrapeMyScheme = async (req, res) => {
     const page = await browser.newPage();
 
     await page.goto(
-      "https://www.myscheme.gov.in/schemes/pmsby",
+      "https://www.myscheme.gov.in/search",
       {
         waitUntil: "networkidle2"
       }
     );
 
-    // Wait for content
-    await page.waitForSelector("h1");
-const schemeData = await page.evaluate(() => {
+    await new Promise(resolve =>
+      setTimeout(resolve, 5000)
+    );
 
- 
-  const titleElement = Array.from(
-  document.querySelectorAll("*")
-).find(el =>
-  el.innerText &&
-  el.innerText.trim() ===
-    "Pradhan Mantri Suraksha Bima Yojana"
-);
+ const schemes = await page.evaluate(() => {
+  const text = document.body.innerText;
 
-const title =
-  titleElement?.innerText || "";
+  const lines = text
+    .split("\n")
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
 
-  const paragraphs = Array.from(
-    document.querySelectorAll("p")
-  );
-
-  const description =
-  paragraphs
-    .map(p => p.innerText.trim())
-    .find(text =>
-      text.length > 120 &&
-      text.length < 350 &&
-      !text.includes("Who Can") &&
-      !text.includes("Quick Links") &&
-      !text.includes("Frequently Asked Questions") &&
-      !text.includes("Was this helpful") &&
-      !text.includes("Sign In") &&
-      !text.includes("Dashboard") &&
-      !text.includes("Accessibility")
-    ) || "Government welfare scheme";
-
-  return {
-    title,
-    description
-  };
+  return lines;
 });
+const extractedSchemes = [];
 
-    await browser.close();
+for (let i = 0; i < schemes.length - 2; i++) {
 
-    const existingScheme = await Scheme.findOne({
-  name: schemeData.title
-});
+  const current = schemes[i];
+  const next = schemes[i + 1];
+  const description = schemes[i + 2];
 
-if (!existingScheme) {
+  if (
+    next.includes("Ministry") &&
+    description.length > 50
+  ) {
+    extractedSchemes.push({
+      name: current,
+      ministry: next,
+      description
+    });
+  }
+}
+let addedCount = 0;
 
-  const newScheme = new Scheme({
+for (const scheme of extractedSchemes) {
 
-    name: schemeData.title,
+  const existingScheme = await Scheme.findOne({
+    name: scheme.name
+  });
 
-    description: schemeData.description,
+  if (existingScheme) continue;
 
-    category: "Other",
+  await Scheme.create({
+    name: scheme.name,
 
-    targetAudience: ["All"],
+    description: scheme.description,
 
-    benefits: [
-      "Visit official website for details"
-    ],
+    category: "Education",
 
     eligibility: {
       otherCriteria:
-        "Check official scheme guidelines"
+        "Check official guidelines"
     },
+
+    benefits: [
+      "Government scheme"
+    ],
 
     applicationProcess:
       "Apply through official portal",
 
     applyLink:
-      "https://www.myscheme.gov.in/schemes/pmsby",
+      "https://www.myscheme.gov.in",
+
+    targetAudience: ["All"],
 
     isActive: true
   });
 
-  await newScheme.save();
+  addedCount++;
 }
+console.log("Found schemes:", extractedSchemes.length);
+console.log(extractedSchemes);
 
-    res.json({
+    await browser.close();
+res.json({
   success: true,
-  message: "Scheme saved successfully",
-  data: schemeData
+  found: extractedSchemes.length,
+  addedToDatabase: addedCount
 });
-  } catch (error) {
+    
 
+  } catch (error) {
     console.error(error);
 
     res.status(500).json({
       success: false,
       error: error.message
+    });
+  }
+};
+const testApi = async (req, res) => {
+  try {
+    const response = await axios.get(
+      "https://api.myscheme.gov.in/search/v6/schemes?lang=en&q=%5B%5D&keyword=scholarship&sort=&from=10&size=10",
+      {
+        headers: {
+  "x-api-key": "tYTy5eEhlu9rFjyxuCr7ra7ACp4dv1RH8gWuHTDc",
+  "Origin": "https://www.myscheme.gov.in",
+  "Referer": "https://www.myscheme.gov.in/",
+  "User-Agent":
+    "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Mobile Safari/537.36",
+  "Accept": "application/json, text/plain, */*"
+}
+      }
+    );
+
+    console.log(
+      "Number of schemes:",
+      response.data.data.hits.items.length
+    );
+
+    console.log(
+      response.data.data.hits.items[0]
+    );
+
+    res.json(response.data);
+
+  } catch (error) {
+    console.error(error.response?.data || error.message);
+
+    res.status(500).json({
+      success: false,
+      error: error.response?.data || error.message,
+    });
+  }
+};
+const importMySchemeData = async (req, res) => {
+  try {
+    let addedCount = 0;
+    let totalFetched = 0;
+
+    for (let from = 0; from < 70; from += 10) {
+      console.log("Fetching from =", from);
+
+      const response = await axios.get(
+        `https://api.myscheme.gov.in/search/v6/schemes?lang=en&q=%5B%5D&keyword=&sort=&from=${from}&size=10`,
+        {
+          headers: {
+            "x-api-key":
+              "tYTy5eEhlu9rFjyxuCr7ra7ACp4dv1RH8gWuHTDc",
+          },
+        }
+      );
+
+      const schemes = response.data.data.hits.items;
+
+      totalFetched += schemes.length;
+
+      console.log(
+        `Page ${from / 10 + 1}: ${schemes.length} schemes`
+      );
+
+      for (const item of schemes) {
+        const existingScheme = await Scheme.findOne({
+          name: item.fields.schemeName,
+        });
+
+        if (existingScheme) continue;
+        
+
+        const states =
+  item.fields.beneficiaryState || [];
+
+const categories =
+  item.fields.schemeCategory || [];
+
+const isOdisha =
+  states.includes("Odisha");
+
+const isCentral =
+  states.includes("All");
+
+const isRelevantState =
+  isOdisha || isCentral;
+
+const isRelevantCategory =
+  categories.some(cat =>
+    cat.includes("Education") ||
+    cat.includes("Employment") ||
+    cat.includes("Skills") ||
+    cat.includes("Entrepreneurship") ||
+    cat.includes("Empowerment")
+  );
+
+if (!isRelevantState || !isRelevantCategory) {
+  continue;
+}
+
+        const categoryText =
+  categories.join(" ");
+
+let category = "Other";
+
+if (categoryText.includes("Education")) {
+  category = "Education";
+}
+else if (
+  categoryText.includes("Skills") ||
+  categoryText.includes("Employment")
+) {
+  category = "Skill Development";
+}
+else if (
+  categoryText.includes("Entrepreneurship")
+) {
+  category = "Entrepreneurship";
+}
+
+        console.log(
+          item.fields.schemeName,
+          states,
+          categories,
+          item.fields.level
+        );
+
+        await Scheme.create({
+          name:
+            item.fields.schemeName ||
+            "Government Scheme",
+
+          description:
+            item.fields.briefDescription ||
+            "Refer official website for details",
+
+          category,
+          state:
+  states.includes("Odisha")
+    ? "Odisha"
+    : "Central",
+
+          eligibility: {
+            otherCriteria:
+              item.fields.schemeFor ||
+              "Check official guidelines",
+          },
+
+          benefits:
+            item.fields.tags || [
+              "Refer official website",
+            ],
+
+          applicationProcess:
+            "Apply through official government portal",
+
+          applyLink:
+            `https://www.myscheme.gov.in/schemes/${item.slug}`,
+
+          targetAudience: ["All"],
+
+          isActive: true,
+        });
+
+        addedCount++;
+      }
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, 2000)
+      );
+    }
+
+    res.json({
+      success: true,
+      totalFetched,
+      addedToDatabase: addedCount,
+    });
+  } catch (error) {
+    console.error(
+      error.response?.status,
+      error.response?.data
+    );
+
+    res.status(500).json({
+      success: false,
+      error:
+        error.response?.data || error.message,
     });
   }
 };
@@ -464,5 +651,7 @@ module.exports = {
   deleteScheme,
   getLatestSchemes,
   fetchGovernmentSchemes,
-  scrapeMyScheme
+  scrapeMyScheme,
+  testApi,
+  importMySchemeData
 };
